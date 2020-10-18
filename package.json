@@ -10,13 +10,14 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "react": "16.13.1",
-    "react-native": "0.63.3",
     "@react-native-community/masked-view": "0.1.10",
     "@react-navigation/bottom-tabs": "^5.9.1",
     "@react-navigation/native": "^5.7.5",
     "@react-navigation/stack": "^5.9.2",
+    "react": "16.13.1",
     "react-dom": "16.13.1",
+    "react-native": "0.63.3",
+    "react-native-ble-plx": "^2.0.1",
     "react-native-floating-action": "^1.21.0",
     "react-native-gesture-handler": "~1.7.0",
     "react-native-paper": "^4.2.0",
