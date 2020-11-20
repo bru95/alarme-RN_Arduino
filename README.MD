@@ -1,4 +1,4 @@
-Alarme com sensor de presença e controle por app mobile.
+# Alarme com sensor de presença e controle por app mobile.
 
 Embarcado construído com Arduino ESP32 e app mobile desenvolvido em react-native.
 
