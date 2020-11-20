@@ -1,117 +1,120 @@
-import React from 'react';
-import { StyleSheet, View, Switch, Text, NativeModules, NativeEventEmitter } from 'react-native';
-import BleManager from 'react-native-ble-manager';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Switch, Text, Platform } from 'react-native';
+import { BleManager } from "react-native-ble-plx";
+import base64 from 'react-native-base64'
 import Icon from 'react-native-vector-icons/MaterialIcons';
 Icon.loadFont();
 
-const BleManagerModule = NativeModules.BleManager;
-const bleManagerEmitter = new NativeEventEmitter(BleManagerModule);
+const HomePage = (props) => {
+    const [deviceInfo, setDeviceInfo] = useState({ active: false, connected: false, writable: false });
+    const comm = useRef(null);
+    let manager = new BleManager();
+    const DEVICE_NAME = "Meu Alarme";
 
-export default class HomePage extends React.Component {
-    constructor(props) {
-        super(props);
-
-        this.state = {
-            device:
-            {
-                id: 1,
-                name: 'Procurando ...'
-            },
-            peripherals: new Map()
-        }
-    }
-
-    componentDidMount() {
-        const DEVICE_NAME = "HC-06";
-        BleManager.start({ showAlert: false })
-
-        /*this.handlerDiscover = bleManagerEmitter.addListener(
-            'BleManagerDiscoverPeripheral',
-            this.handleDiscoverPeripheral
-        );
-
-        this.handlerStop = bleManagerEmitter.addListener(
-            'BleManagerStopScan',
-            this.handleStopScan
-        );
-
-        this.scanForDevices(); // I chose to start scanning for devices here*/
-
-        BleManager.getBondedPeripherals([]).then((bondedPeripheralsArray) => {
-            bondedPeripheralsArray.map(device => {
-                if (device.name == DEVICE_NAME) {
-                    this.setState({ device: { name: device.name, id: device.id, active: false } });
-                }
+    useEffect(() => {
+        if (Platform.OS == 'ios') {
+            manager.onStateChange((state) => {
+                if (state === 'PoweredOn') scanAndConnect()
             })
-        });
-    }
-
-    scanForDevices() {
-        BleManager.scan([], 15);
-    }
-
-    handleDiscoverPeripheral = (peripheral) => {
-        const { peripherals } = this.state;
-
-        if (peripheral.id == "98:D3:32:31:15:05") {
-            peripherals.set(peripheral.id, "HC-06");
+        } else {
+            scanAndConnect()
         }
-        this.setState({ peripherals });
-    };
+    }, []);
 
-    handleStopScan = () => {
-        console.log('Scan is stopped. Devices: ', this.state.peripherals);
+    scanAndConnect = () => {
+        manager.startDeviceScan(null, null, (error, device) => {
+            console.log('scanning ...')
+
+            if (error) {
+                console.log(error.message)
+                return
+            }
+
+            if (device.name != null) {
+                console.log(device.name);
+            }
+
+            if (device.name == DEVICE_NAME) {
+                console.log("Connecting to device")
+                manager.stopDeviceScan()
+                device.connect()
+                    .then((device) => {
+                        setDeviceInfo({ ...deviceInfo, connected: true })
+                        console.log("Discovering services and characteristics")
+                        return device.discoverAllServicesAndCharacteristics()
+                    })
+                    .then((device) => {
+                        findServicesAndCharacteristics(device);
+                        console.log("Setting notifications")
+                    })
+                    .then(() => {
+                        console.log("Listening...")
+                    }, (error) => {
+                        console.log(error.message)
+                    })
+            }
+        })
+    }
+
+    findServicesAndCharacteristics = (device) => {
+        device.services().then(services => {
+            services.forEach((service, i) => {
+                console.log("Service UUID: " + service.uuid);
+                service.characteristics().then(characteristics => {
+                    characteristics.forEach((c, i) => {
+                        if ((c.isWritableWithoutResponse || c.isWritableWithResponse) && c.isReadable) {
+                            comm.current = c;
+
+                            c.read().then((response) => {
+                                let act = false;
+                                if (base64.decode(response.value) == '1') {
+                                    act = true;
+                                }
+                                setDeviceInfo({ ...deviceInfo, active: act, writable: true });
+                            });
+                        }
+                    });
+                });
+            });
+        });
     }
 
     toggleSwitch = () => {
-        var active = !this.state.device.active;
-        let device = this.state.device;
-        device.active = active;
-        this.setState({
-            device: device
-        });
-        //send bool to HC-06
-        this.sendData(active, device);
+        let act = !deviceInfo.active;
+        setDeviceInfo({ ...deviceInfo, active: act });
+        sendData(act);
     };
 
-    sendData(data, device) {
-        console.log("Conectando ... " + device.id);
-        BleManager.connect(device.id).then(() => {
-            console.log('Connected to ' + device.name);
-        }).catch((error) => {
-            console.log('Connection error', error);
-        });
-    }
-
-    render() {
-        const { id, name, active } = this.state.device;
-
-        let text;
-        if (active) {
-            text = 'Desarmar alarme';
-        } else {
-            text = 'Armar alarme';
+    sendData = (act) => {
+        data = '0';
+        if (act) {
+            data = '1';
         }
-
-        return (
-            <View key={id} style={styles.container}>
-                <View style={styles.content}>
-
-                    <Icon name='settings-remote' size={70} color='#777' />
-                    <Text style={{ marginTop: 10 }} >{name}</Text>
-                    <Switch
-                        trackColor={{ false: "#8B0000", true: "#008000" }}
-                        thumbColor={active ? "#FFF" : "#FFF"}
-                        ios_backgroundColor="#3e3e3e"
-                        value={active}
-                        onValueChange={this.toggleSwitch}
-                        style={{ marginTop: 10 }}
-                    />
-                    <Text style={{ marginTop: 10, fontStyle: 'italic' }} >{text}</Text>
-                </View>
-            </View>
-        )
+        comm.current.writeWithResponse(base64.encode(data))
+            .then(() => console.log("Mensagem enviada com sucesso"))
+            .catch(err => {
+                console.log("Erro ao enviar mensagem: " + err);
+            });
     }
+
+    return (
+        <View style={styles.container}>
+            <View style={styles.content}>
+
+                <Icon name='settings-remote' size={70} color='#777' />
+                <Text style={{ marginTop: 10 }} >{deviceInfo.connected && deviceInfo.writable ? DEVICE_NAME : "Procurando ..."}</Text>
+                <Switch
+                    trackColor={{ false: "#8B0000", true: "#008000" }}
+                    thumbColor={deviceInfo.active ? "#FFF" : "#FFF"}
+                    ios_backgroundColor="#3e3e3e"
+                    value={deviceInfo.active}
+                    onValueChange={toggleSwitch}
+                    style={{ marginTop: 10 }}
+                />
+                <Text style={{ marginTop: 10, fontStyle: 'italic' }} >{deviceInfo.active ? "Desarmar Alarme" : "Armar Alarme"}</Text>
+            </View>
+        </View>
+    )
 }
 
 const styles = StyleSheet.create({
@@ -129,3 +132,4 @@ const styles = StyleSheet.create({
     },
 })
 
+export default HomePage;

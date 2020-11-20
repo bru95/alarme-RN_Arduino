@@ -12,7 +12,17 @@ const HomeStack = createStackNavigator();
 function HomeStackScreen() {
   return (
     <HomeStack.Navigator>
-      <HomeStack.Screen name="Home" component={HomePage} />
+      <HomeStack.Screen
+        name="Home"
+        component={HomePage}
+        options={{
+          title: 'Arduino e React-Native',
+          headerTitleAlign: 'center',
+          headerStyle: {
+            backgroundColor: '#9C27B0',
+          },
+          headerTintColor: '#fff'
+        }} />
     </HomeStack.Navigator>
   );
 }
